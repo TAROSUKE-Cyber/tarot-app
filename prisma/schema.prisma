@@ -1,0 +1,65 @@
+// prisma/schema.prisma
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  entitlement Entitlement?
+  purchases   Purchase[]
+  readings    ReadingLog[]
+}
+
+model Entitlement {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+
+  // free / premium などを入れる
+  plan      String   @default("free")
+  credits   Int      @default(0)
+
+  stripeCustomerId String?
+  stripeSubId      String?
+
+  updatedAt DateTime @updatedAt
+}
+
+model Purchase {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  // single | ticket | subscription
+  type      String
+  stripeSessionId String @unique
+  amount    Int?
+  currency  String?
+
+  createdAt DateTime @default(now())
+}
+
+model ReadingLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  // "2025-12-11" みたいな文字列
+  ymd       String
+  // daily_free | credit | premium | free_short など
+  kind      String
+  // one | three など
+  spread    String
+  createdAt DateTime @default(now())
+
+  @@index([userId, ymd])
+}
