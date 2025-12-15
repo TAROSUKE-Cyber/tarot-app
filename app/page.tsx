@@ -33,7 +33,7 @@ export default function HomePage() {
       <div style={styles.container}>
         <header style={styles.header}>
           <div style={styles.badge}>Tarot</div>
-          <h1 style={styles.title}>今日のタロットメッセージ</h1>
+          <h1 style={styles.title}>今日のタロットメッセージ（テスト）</h1>
           <p style={styles.sub}>
             1日1回の無料深掘り / チケット / 月額プレミアム対応
           </p>
