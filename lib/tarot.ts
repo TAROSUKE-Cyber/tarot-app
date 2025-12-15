@@ -40,8 +40,6 @@ export function drawSpread(spread: SpreadType) {
 
 // lib/tarot.ts の一番下あたりに追加
 
-import type { Card } from "./tarot"; // もし同じファイル内なら不要
-
 export function getCardImagePath(card: Card): string {
   // カード名をスラッグ化してファイル名にする
   const slug = card.name
