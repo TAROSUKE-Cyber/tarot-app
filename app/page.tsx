@@ -1,9 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { getCardImagePath } from "@/lib/tarot"; // ← 追加
+import { useEffect, useMemo, useState } from "react";
+import { getCardImagePath } from "@/lib/tarot";
 
 type SpreadType = "one" | "three";
+
+type EntitlementData = {
+  plan: string;
+  planLabel: string;
+  credits: number;
+  isPremium: boolean;
+  hasCredits: boolean;
+} | null;
 
 export default function HomePage() {
   const [email, setEmail] = useState("");
@@ -11,7 +19,67 @@ export default function HomePage() {
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
+  const [entitlement, setEntitlement] = useState<EntitlementData>(null);
+  const [entLoading, setEntLoading] = useState(false);
+  const [entError, setEntError] = useState<string | null>(null);
+
   const canRun = useMemo(() => email.includes("@"), [email]);
+
+  // メールアドレスに応じて利用状況を取得
+  useEffect(() => {
+    if (!email || !email.includes("@")) {
+      setEntitlement(null);
+      setEntError(null);
+      setEntLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchStatus = async () => {
+      setEntLoading(true);
+      setEntError(null);
+      try {
+        const res = await fetch("/api/entitlement/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`status ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        if (cancelled) return;
+
+        setEntitlement({
+          plan: data.plan,
+          planLabel: data.planLabel,
+          credits: data.credits,
+          isPremium: data.isPremium,
+          hasCredits: data.hasCredits,
+        });
+      } catch (e) {
+        console.error("failed to load entitlement status", e);
+        if (!cancelled) {
+          setEntError("ご利用状況の取得に失敗しました。時間をおいて再度お試しください。");
+          setEntitlement(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setEntLoading(false);
+        }
+      }
+    };
+
+    fetchStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [email]);
 
   async function run() {
     setLoading(true);
@@ -47,6 +115,58 @@ export default function HomePage() {
             placeholder="you@example.com"
             style={styles.input}
           />
+
+          {/* ▼ ご利用状況バー */}
+          <div style={styles.statusBox}>
+            {!email && (
+              <div style={styles.statusText}>
+                メールアドレスをご入力いただくと、現在のご利用状況が表示されます。
+              </div>
+            )}
+
+            {email && !email.includes("@") && (
+              <div style={styles.statusText}>
+                正しい形式のメールアドレスをご入力ください。
+              </div>
+            )}
+
+            {email && email.includes("@") && entLoading && (
+              <div style={styles.statusText}>ご利用状況を取得しています…</div>
+            )}
+
+            {email && email.includes("@") && entError && (
+              <div style={styles.statusError}>{entError}</div>
+            )}
+
+            {email && email.includes("@") && entitlement && !entError && !entLoading && (
+              <div>
+                <div style={styles.statusTitle}>現在のご利用状況</div>
+                <div style={styles.statusLine}>
+                  <span style={styles.statusLabel}>ご契約プラン：</span>
+                  <span style={styles.statusValue}>{entitlement.planLabel}</span>
+                </div>
+                <div style={styles.statusLine}>
+                  <span style={styles.statusLabel}>お持ちのチケット：</span>
+                  <span style={styles.statusValue}>{entitlement.credits} 枚</span>
+                </div>
+
+                {entitlement.isPremium ? (
+                  <div style={styles.statusNote}>
+                    プレミアムプランのため、深掘りは回数無制限でご利用いただけます。
+                  </div>
+                ) : entitlement.hasCredits ? (
+                  <div style={styles.statusNote}>
+                    チケットをご利用いただくことで、深掘りメッセージをお届けいたします。
+                  </div>
+                ) : (
+                  <div style={styles.statusNote}>
+                    深掘りをご希望の場合は、チケットのご購入または月額プランのご契約をご検討ください。
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {/* ▲ ご利用状況バー */}
 
           <label style={{ ...styles.label, marginTop: 14 }}>
             スプレッド
@@ -87,19 +207,16 @@ export default function HomePage() {
               </span>
             </div>
 
-            {/* ▼ カード画像付きの表示部分を変更 */}
-
             <div style={styles.spreadBox}>
               {(result.cards ?? []).map((c: any, i: number) => {
                 const img = getCardImagePath(c);
-                const isReversed = !!c.reversed; // ← 逆位置かどうか
+                const isReversed = !!c.reversed;
 
                 return (
                   <div key={i} style={styles.cardMini}>
                     <div
                       style={{
                         ...styles.cardImageBox,
-                        // 逆位置のときだけカードを180度回転させる
                         transform: isReversed ? "rotate(180deg)" : "none",
                       }}
                     >
@@ -123,14 +240,6 @@ export default function HomePage() {
                 );
               })}
             </div>
-
-
-
-
-
-
-
-            {/* ▲ ここまで */}
 
             <div style={styles.readingText}>{result.text}</div>
 
@@ -161,7 +270,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundSize: "cover",
     backgroundPosition: "center",
     backgroundRepeat: "no-repeat",
-    backgroundColor: "#050516", // 読み込み前の保険
+    backgroundColor: "#050516",
     color: "#f7f7ff",
     padding: "28px 16px 60px",
   },
@@ -199,6 +308,42 @@ const styles: Record<string, React.CSSProperties> = {
     color: "white",
     outline: "none",
   },
+
+  // ▼ ご利用状況バーまわり
+  statusBox: {
+    marginTop: 10,
+    marginBottom: 10,
+    padding: 10,
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.15)",
+    background: "rgba(0,0,0,0.35)",
+    fontSize: 12,
+  },
+  statusTitle: {
+    fontWeight: 600,
+    marginBottom: 4,
+  },
+  statusText: {
+    opacity: 0.85,
+  },
+  statusError: {
+    color: "#fecaca",
+  },
+  statusLine: {
+    marginTop: 2,
+  },
+  statusLabel: {
+    opacity: 0.85,
+  },
+  statusValue: {
+    fontWeight: 600,
+  },
+  statusNote: {
+    marginTop: 6,
+    opacity: 0.85,
+  },
+  // ▲ ご利用状況バーここまで
+
   row: {
     display: "flex",
     gap: 8,
@@ -268,14 +413,12 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(255,255,255,0.08)",
     background: "rgba(0,0,0,0.18)",
     width: "100%",
-    maxWidth: 220,      // カードの最大横幅
-    margin: "0 auto",   // 真ん中寄せ
+    maxWidth: 220,
+    margin: "0 auto",
   },
 
-  // ▼ 追加スタイル（カード画像）
   cardImageBox: {
     width: "100%",
-    // height は固定しない
     borderRadius: 12,
     overflow: "hidden",
     marginBottom: 8,
@@ -284,12 +427,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardImage: {
     width: "100%",
-    height: "auto",      // 縦横比を保ったまま高さを決める
-    display: "block",    // 余計な余白を消す
-    objectFit: "contain" // 念のため
+    height: "auto",
+    display: "block",
+    objectFit: "contain",
   },
-
-  // ▲ 追加ここまで
 
   pos: { fontSize: 11, opacity: 0.75, marginBottom: 4 },
   cardName: { fontSize: 15 },
