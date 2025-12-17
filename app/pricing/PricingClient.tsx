@@ -30,11 +30,12 @@ async function startCheckout(email: string, type: PurchaseType) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, type }),
   });
+
   const data = await res.json();
   if (data.url) {
     window.location.href = data.url;
   } else {
-    alert("チェックアウト開始に失敗しました");
+    alert("チェックアウト開始に失敗しました。時間をおいて再度お試しください。");
   }
 }
 
@@ -49,16 +50,37 @@ async function openPortal(email: string) {
     localStorage.setItem("tarotEmail", email);
   }
 
-  const res = await fetch("/api/stripe/portal", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  const data = await res.json();
-  if (data.url) {
-    window.location.href = data.url;
-  } else {
-    alert("ポータルの取得に失敗しました");
+  try {
+    const res = await fetch("/api/stripe/portal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await res.json().catch(() => ({} as any));
+
+    // URL が返ってきた場合はそのまま遷移
+    if (res.ok && data && data.url) {
+      window.location.href = data.url;
+      return;
+    }
+
+    // ステータスコードに応じてメッセージを出し分け
+    if (res.status === 400 || res.status === 404) {
+      alert(
+        "サブスク管理ポータルは、現在サブスクリプション（月額プラン）をご契約中のお客様のみご利用いただけます。\n\n「月額プレミアム」にお申し込み後、再度お試しください。"
+      );
+    } else {
+      console.error("portal error:", res.status, data);
+      alert(
+        "サブスク管理ポータルの取得中にエラーが発生しました。\nお手数ですが、しばらく時間をおいてから再度お試しください。"
+      );
+    }
+  } catch (e) {
+    console.error("portal fetch error:", e);
+    alert(
+      "ネットワークエラーによりサブスク管理ポータルを開けませんでした。\n通信環境をご確認の上、再度お試しください。"
+    );
   }
 }
 
